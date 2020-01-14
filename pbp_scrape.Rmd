@@ -1,0 +1,100 @@
+---
+title: "Play-By-Play"
+author: "Thomas Rhomberg"
+date: "November 11, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rvest)
+library(tidyverse)
+library(ggformula)
+library(stringr)
+library(readxl)
+library(hms)
+```
+
+start here. work both directions
+Scrape Play by Play
+```{r start html session}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/adrian-college/boxscore/5910"
+
+pbp_session <- html_session(pbp_url)
+```
+
+
+```{r navigate to pbp}
+pbp_session %>% follow_link("Play-By-Play")
+pbp_fh_raw <- pbp_session %>% read_html() %>% html_node("#period-1 > table") %>% html_table()
+pbp_session %>% follow_link("Second Half")
+pbp_sh_raw <- pbp_session %>% read_html() %>% html_node("#period-2 > table") %>% html_table()
+```
+
+```{r fix column names}
+colnames(pbp_fh_raw) <- c("Time", "AwayTeam", "AwayScore", "Play Team Indicator", "HomeScore", "HomeTeam", "GameScore", "Team Indicator", "Play")
+colnames(pbp_sh_raw) <- c("Time", "AwayTeam", "AwayScore", "Play Team Indicator", "HomeScore", "HomeTeam", "GameScore", "Team Indicator", "Play")
+pbp_fh_raw
+```
+
+
+```{r initial cleaning, error=FALSE}
+pbp_first_half <- pbp_fh_raw %>% mutate("Half" = 1) %>% 
+                    separate(HomeScore, into=c("HomeScore", "PtDiffHome")) %>% 
+                    separate(AwayScore, into = c("AwayScore", "PtDiffAway")) %>%
+                    select(-"Play Team Indicator", -"Team Indicator", -PtDiffAway, -PtDiffHome)
+
+pbp_first_half$HomeScore <- as.integer(as.character(pbp_first_half$HomeScore))
+pbp_first_half$AwayScore <- as.integer(as.character(pbp_first_half$AwayScore))
+pbp_first_half$Time <- as.hms(paste0('00:', pbp_first_half$Time))
+
+pbp_second_half <- pbp_sh_raw %>% mutate("Half" = 2) %>% 
+                    separate(HomeScore, into=c("HomeScore", "PtDiffHome")) %>% 
+                    separate(AwayScore, into = c("AwayScore", "PtDiffAway")) %>%
+                    select(-"Play Team Indicator", -"Team Indicator", -PtDiffAway, -PtDiffHome)
+
+pbp_second_half$HomeScore <- as.integer(as.character(pbp_second_half$HomeScore))
+pbp_second_half$AwayScore <- as.integer(as.character(pbp_second_half$AwayScore))
+pbp_second_half$Time <- as.hms(paste0('00:', pbp_second_half$Time))
+
+pbp_combined <- rbind(pbp_first_half, pbp_second_half)
+```
+
+```{r}
+pbp_clean <- pbp_combined %>% 
+              separate(HomeTeam, into = c("HomeEvent", "HomePlayer"), sep = " by ") %>%
+              separate(AwayTeam, into = c("AwayEvent", "AwayPlayer"), sep = " by ") %>%
+              separate(Play, into = c("Event", "Player"), sep = " by ") %>%
+              separate(HomePlayer, into = c("HomePlayer", "HomePaintShot"), sep = '\\(') %>%
+              separate(AwayPlayer, into = c("AwayPlayer", "AwayPaintShot"), sep = '\\(')
+```
+
+```{r save data}
+save(pbp_clean,file = "cleaned_data/pbp_clean.Rdata")
+```
+
+Import Box Score
+
+```{r load box score}
+box_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/adrian-college/boxscore/5910"
+box_session <- html_session(box_url)
+box_score_away <- box_session %>% read_html() %>% html_nodes("table[class*=\"overall-stats\"]") %>% .[1] %>% html_table()
+box_score_home <- box_session %>% read_html() %>% html_nodes("table[class*=\"overall-stats\"]") %>% .[3] %>% html_table()
+```
+
+
+
+
+
+```{r clean box score}
+box_score_away
+```
+
+
+```{r}
+save(box_score_home, file = "cleaned_data/box_score_home.Rdata")
+save(box_score_away, file = "cleaned_data/box_score_away.Rdata")
+```
+
+
+

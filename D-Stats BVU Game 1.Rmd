@@ -1,0 +1,208 @@
+---
+title: "D-Stats BVU Game 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggformula)
+library(dplyr)
+library(rvest)
+library(selectr)
+library(xml2)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(hms)
+library(zoo)
+library(forcats)
+library(dygraphs)
+library(ggvis)
+library(xts)
+```
+
+# This function will remove all of the data sets from the global enviornment. Do not press unless you want to start completely over
+``` {r start over}
+rm(list = ls())
+```
+
+``` {r load data}
+firstHalfBVU_D <- read_excel("C:/Users/ab546861/Desktop/MBB/D-Stats BVU Game 1.xlsx", sheet = "First Half")
+secondHalfBVU_D <- read_excel("C:/Users/ab546861/Desktop/MBB/D-Stats BVU Game 1.xlsx", sheet = "Second Half")
+overtimeBVU_D <- read_excel("C:/Users/ab546861/Desktop/MBB/D-Stats BVU Game 1.xlsx", sheet = "Overtime")
+# possessions are by the fully stop or non-stop not by second chance points
+```
+
+``` {r first half clean data}
+firstHalfBVU_Clean <- firstHalfBVU_D %>% 
+  separate(time, into = c("date", "time"), sep = " ") %>% 
+  select(possession, time, stop_flag, stop_type, make_flag, shot_type, shot_contest, location, points)
+names(firstHalfBVU_Clean) <- c("Possession", "Time_Remaining", "Stop", "Stop_Type", "Shot_Taken", "Shot_Type", "Contested", "Location", "Points")
+
+save(firstHalfBVU_Clean, file = "C:/Users/ab546861/Desktop/MBB/firstHalfBVU_Clean.RData")
+
+# use this code to load data in other markdown
+load(file = "C:/Users/ab546861/Desktop/MBB/firstHalfBVU_Clean.RData")
+```
+
+``` {r second half clean data}
+secondHalfBVU_Clean <- secondHalfBVU_D %>% 
+  separate(time, into = c("date", "time"), sep = " ") %>% 
+  select(possession, time, stop_flag, stop_type, make_flag, shot_type, shot_contest, location, points)
+names(secondHalfBVU_Clean) <- c("Possession", "Time_Remaining", "Stop", "Stop_Type", "Shot_Taken", "Shot_Type", "Contested", "Location", "Points")
+
+save(secondHalfBVU_Clean, file = "C:/Users/ab546861/Desktop/MBB/secondHalfBVU_Clean.RData")
+
+# use this code to load data in other markdown
+load(file = "C:/Users/ab546861/Desktop/MBB/secondHalfBVU_Clean.RData")
+```
+
+``` {r overtime clean data}
+overtimeBVU_Clean <- overtimeBVU_D %>% 
+  separate(time, into = c("date", "time"), sep = " ") %>%
+  select(possession, time, stop_flag, stop_type, make_flag, shot_type, shot_contest, location, points)
+names(overtimeBVU_Clean) <- c("Possession", "Time_Remaining", "Stop", "Stop_Type", "Shot_Taken", "Shot_Type", "Contested", "Location", "Points")
+
+save(overtimeBVU_Clean, file = "C:/Users/ab546861/Desktop/MBB/overtimeBVU_Clean.RData")
+
+# use this code to load data in other markdown
+load(file = "C:/Users/ab546861/Desktop/MBB/overtimeBVU_Clean.RData")
+```
+
+``` {r first half hms}
+firstHalfBVU_Clean$Time_Remaining <- as.hms(paste0('00:', firstHalfBVU_Clean$Time_Remaining))
+```
+
+``` {r first changing tf}
+firstHalfBVU_Clean <- firstHalfBVU_Clean %>%
+  mutate(Stop = ifelse(Stop == TRUE, 1, -1))
+```   
+
+``` {r second half hms}
+secondHalfBVU_Clean$Time_Remaining <- as.hms(paste0('00:', secondHalfBVU_Clean$Time_Remaining))
+```
+
+``` {r second changing tf}
+secondHalfBVU_Clean <- secondHalfBVU_Clean %>% 
+  mutate(Stop = ifelse(Stop == TRUE, 1, -1))
+```
+
+``` {r overtime hms}
+overtimeBVU_Clean$Time_Remaining <- as.hms(paste0('00:', overtimeBVU_Clean$Time_Remaining))
+```
+
+``` {r overtime changing tf}
+overtimeBVU_Clean <- overtimeBVU_Clean %>% 
+  mutate(Stop = ifelse(Stop == TRUE, 1, -1))
+```
+
+``` {r stops per half fir}
+fgraph <- firstHalfBVU_Clean %>% 
+  arrange(Stop, Shot_Type) %>%
+  count(Stop)
+```
+
+``` {r stops per half sec}
+sgraph <- secondHalfBVU_Clean %>% 
+  arrange(Stop, Shot_Type) %>%
+  count(Stop)
+```
+
+``` {r stops per over}
+overgraph <- overtimeBVU_Clean %>% 
+  arrange(Stop, Shot_Type) %>%
+  count(Stop)
+```
+
+``` {r fist half stops}
+firstHalfstopsBVU <- firstHalfBVU_Clean %>%
+    gf_point(Stop ~ Time_Remaining, xlab = "Time Remaining", ylab = " ", title = "Loras 53 | BVU 36") %>% 
+  gf_line(Stop ~ Time_Remaining) %>% 
+  gf_smooth() + 
+  scale_y_discrete(limits = c(-1,0,1), labels = c("Baskets", "1:1 Ratio", "Stops")) + 
+  annotate("text", x = 1, y = 1.2, label = ifelse(fgraph$Stop == 1, fgraph$n, " "), size = 4) + 
+  annotate("text", x = 1, y = -1.2, label = ifelse(fgraph$Stop == -1, fgraph$n, " "), size = 4) +
+  theme(axis.text.x = element_text(angle = 90))
+firstHalfstopsBVU
+```
+
+``` {r second half stops}
+secondHalfstopsBVU <- secondHalfBVU_Clean %>%
+    gf_point(Stop ~ Time_Remaining, xlab = " <- End | Start ->", ylab = " ", title = "Loras 27 | BVU 44") %>% 
+  gf_line(Stop ~ Time_Remaining) %>% 
+  gf_smooth() +
+  scale_y_discrete(limits = c(-1,0,1), labels = c("Baskets", "1:1 Ratio", "Stops")) +
+  annotate("text", x = 1, y = 1.2, label =  ifelse(sgraph$Stop == 1, sgraph$n, " "), size = 4) + 
+  annotate("text", x = 1, y = -1.2, label = ifelse(sgraph$Stop == -1, sgraph$n, " "), size = 4) +
+  theme(axis.text.x = element_text(angle = 90))
+secondHalfstopsBVU
+```
+
+``` {r overtime stops}
+overtimeStopsBVU <- overtimeBVU_Clean %>%
+    gf_point(Stop ~ Time_Remaining, xlab = "<- End | Start ->", ylab = " ") %>% 
+  gf_line(Stop ~ Time_Remaining) %>% 
+  gf_smooth() +
+  scale_y_discrete(limits = c(-1,0,1), labels = c("Baskets", "1:1 Ratio", "Stops")) +
+  annotate("text", x = 1, y = 1.2, label = ifelse(overgraph$Stop == 1, overgraph$n, " "), size = 4) + 
+  annotate("text", x = 1, y = -1.2, label = ifelse(overgraph$Stop == -1, overgraph$n, " "), size = 4) +
+  theme(axis.text.x = element_text(angle = 90))
+overtimeStopsBVU
+```
+
+``` {r}
+firstHalfTotalStops <- ifelse(fgraph$Stop == 1, fgraph$n, NA)
+firstHalfTotalBaskets <- ifelse(fgraph$Stop == -1, fgraph$n, NA)
+firstRatio <- firstHalfTotalBaskets/firstHalfTotalBaskets
+firstRatio
+```
+
+``` {r binding total data}
+fullGameBVU_D <- rbind(firstHalfBVU_Clean, secondHalfBVU_Clean, overtimeBVU_Clean)
+```
+
+``` {r}
+firstHalfBVU_Clean %>% 
+  arrange(Stop, Contested) %>%
+  mutate(Stop = ifelse(Stop == TRUE, 1, 0)) %>%
+  mutate(Contested = ifelse(Contested == TRUE, "Contested", "Not Contested")) %>% 
+  gf_col(Stop ~ Location | Contested) + theme(axis.text.x = element_text(angle = 90))
+```
+
+``` {r}
+secondHalfBVU_Clean %>% 
+  mutate(Stop = ifelse(Stop == TRUE, 1, 0)) %>%
+  mutate(Contested = ifelse(Contested == TRUE, "Contested", "Not Contested")) %>% 
+  gf_col(Stop ~ Location | Contested) + theme(axis.text.x = element_text(angle = 90))
+```
+
+``` {r}
+overtimeBVU_Clean %>%
+  mutate(Stop = ifelse(Stop == TRUE, 1, 0)) %>%
+  mutate(Contested = ifelse(Contested == TRUE, "Contested", "Not Contested")) %>% 
+  gf_col(Stop ~ Location | Contested) + theme(axis.text.x = element_text(angle = 90))
+```
+
+``` {r}
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -1,0 +1,246 @@
+---
+title: "PlaybyPlay"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggformula)
+library(dplyr)
+library(rvest)
+library(selectr)
+library(xml2)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(hms)
+library(zoo)
+```
+
+# This function will remove all of the data sets from the global enviornment. Do not press unless you want to start completely over
+``` {r start over}
+rm(list = ls())
+```
+
+# r chunck that will scrabe the play by play per each game. If you want to load each game, go to the global enviornment when finished running.
+``` {r start html session concordia chicago}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/concordia-university-chicago/boxscore/5902"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html session blackburn college}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/blackburn-college/boxscore/5903"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html session concordia wisconsin}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/concordia-university-wis-/boxscore/5904"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html session augustana}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/augustana-college-il-/boxscore/5905"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions st scholastica}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/college-of-st-scholastica/boxscore/5906"
+
+pbp_session <- html_session(pbp_url)
+```
+
+```{r start html sessions central college game 1}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/central-college/boxscore/5907"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions luther college game 1}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/luther-college/boxscore/5908"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions simpson college game 1}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/luther-college/boxscore/5908"
+
+pbp_session <- html_session(pbp_url)
+```
+
+```{r start html session adrian college}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/adrian-college/boxscore/5910"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions trine college}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/trine-university/boxscore/5911"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions monmoth college}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/monmouth-college/boxscore/5912"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions macmurray college}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/macmurray-college/boxscore/5913"
+
+pbp_session <- html_session(pbp_url)
+```
+
+``` {r start html sessions NWC game 1}
+pbp_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/nebraska-wesleyan-university/boxscore/5914"
+
+pbp_session <- html_session(pbp_url)
+```
+
+# Distingishes between the first and second half play by play on website
+```{r navigate to pbp}
+pbp_session %>% follow_link("Play-By-Play")
+pbp_fh_raw <- pbp_session %>% read_html() %>% html_node("#period-1 > table") %>% html_table()
+pbp_session %>% follow_link("Second Half")
+pbp_sh_raw <- pbp_session %>% read_html() %>% html_node("#period-2 > table") %>% html_table()
+```
+
+# Renaming feild names for easier use
+``` {r rename columns}
+colnames(pbp_fh_raw) <- c("Time", "AwayTeam", "AwayScore", "Play Team Indicator", "HomeScore", "HomeTeam", "GameScore", "Team Indicator", "Play")
+colnames(pbp_sh_raw) <- c("Time", "AwayTeam", "AwayScore", "Play Team Indicator", "HomeScore", "HomeTeam", "GameScore", "Team Indicator", "Play")
+```
+
+# Cleaning data for easier use later
+``` {r cleaning}
+pbp_first_half <- pbp_fh_raw %>% mutate("Half" = 1) %>% 
+                    separate(HomeScore, into=c("HomeScore", "PtDiffHome")) %>% 
+                    separate(AwayScore, into = c("AwayScore", "PtDiffAway")) %>%
+                    select(-"Play Team Indicator", -"Team Indicator", -PtDiffAway, -PtDiffHome)
+
+pbp_first_half$HomeScore <- as.integer(as.character(pbp_first_half$HomeScore))
+pbp_first_half$AwayScore <- as.integer(as.character(pbp_first_half$AwayScore))
+pbp_first_half$Time <- as.hms(paste0('00:', pbp_first_half$Time))
+
+pbp_second_half <- pbp_sh_raw %>% mutate("Half" = 2) %>% 
+                    separate(HomeScore, into=c("HomeScore", "PtDiffHome")) %>% 
+                    separate(AwayScore, into = c("AwayScore", "PtDiffAway")) %>%
+                    select(-"Play Team Indicator", -"Team Indicator", -PtDiffAway, -PtDiffHome)
+
+pbp_second_half$HomeScore <- as.integer(as.character(pbp_second_half$HomeScore))
+pbp_second_half$AwayScore <- as.integer(as.character(pbp_second_half$AwayScore))
+pbp_second_half$Time <- as.hms(paste0('00:', pbp_second_half$Time))
+```
+
+# Cleaning first half play by play
+``` {r first half clean}
+firstHalf <- pbp_first_half %>% select(Time, AwayTeam, AwayScore, HomeScore, HomeTeam, GameScore) %>% separate(GameScore, into = c("LeadingTeam", "AwaytoHome", "Difference"), sep = " ")
+names(firstHalf) <- c("Time", "AwayTeam", "AwayScore", "HomeScore", "HomeTeam", "LeadingTeam", "AwaytoHome", "Difference")
+firstHalfClean <- firstHalf %>% 
+  
+  separate(AwayTeam, into = c("AwayPlay", "AwayPlayer"), sep = "by") %>% 
+  separate(HomeTeam, into = c("HomePlay", "HomePlayer"), sep = "by") %>% 
+  separate(AwayPlayer, into = c("AwayPlayer", "PaintScoreAway"), sep = "\\(") %>%
+  separate(HomePlayer, into = c("HomePlayer", "PaintScoreHome"), sep = "\\(") %>%
+  mutate(PaintScoreAway = ifelse(is.na(PaintScoreAway), FALSE, TRUE)) %>%
+  mutate(PaintScoreHome = ifelse(is.na(PaintScoreHome), FALSE, TRUE)) %>%
+  mutate(Time = na.locf(Time))
+
+firstHalfClean
+```
+
+# Cleaning second half play by play
+``` {r second half cleaning}
+secondHalf <- pbp_second_half %>% select(Time, AwayTeam, AwayScore, HomeScore, HomeTeam, GameScore) %>% separate(GameScore, into = c("LeadingTeam", "AwaytoHome", "Difference"), sep = " ")
+names(secondHalf) <- c("Time", "AwayTeam", "AwayScore", "HomeScore", "HomeTeam", "LeadingTeam", "AwaytoHome", "Difference")
+secondHalfClean <- secondHalf %>% 
+  
+  separate(AwayTeam, into = c("AwayPlay", "AwayPlayer"), sep = "by") %>% 
+  separate(HomeTeam, into = c("HomePlay", "HomePlayer"), sep = "by") %>% 
+  separate(AwayPlayer, into = c("AwayPlayer", "PaintScoreAway"), sep = "\\(") %>%
+  separate(HomePlayer, into = c("HomePlayer", "PaintScoreHome"), sep = "\\(") %>%
+  mutate(PaintScoreAway = ifelse(is.na(PaintScoreAway), FALSE, TRUE)) %>%
+  mutate(PaintScoreHome = ifelse(is.na(PaintScoreHome), FALSE, TRUE)) %>%
+  mutate(Time = na.locf(Time))
+
+secondHalfClean
+```
+
+# Full game binding play by play. Each game is saved in the global environment
+``` {r full game}
+fullGame <- rbind(firstHalfClean, secondHalfClean)
+fullGame_ConcordiaWisconsin <- fullGame
+```
+
+```{r load box score}
+box_url <- "https://duhawks.com/sports/mens-basketball/stats/2019-20/adrian-college/boxscore/5910"
+box_session <- html_session(box_url)
+box_score_away <- box_session %>% read_html() %>% html_nodes("table[class*=\"overall-stats\"]") %>% .[1] %>% html_table()
+box_score_home <- box_session %>% read_html() %>% html_nodes("table[class*=\"overall-stats\"]") %>% .[3] %>% html_table()
+```
+
+``` {r save game file ConcordiaChicago}
+fullGame_ConcordiaChicago <- save(fullGame_ConcordiaChicago, file = "C:/Users/ab546861/Desktop/MBB/fullGame_ConcordiaChicago.RData")
+load(file = "C:/Users/ab546861/Desktop/MBB/fullGame_ConcordiaChicago.RData")
+```
+
+``` {r save game file Blackburn College}
+fullGame_BlackburnCollege <- save(fullGame_BlackburnCollege, file = "C:/Users/ab546861/Desktop/MBB/fullGame_Blackburn.RData")
+load(file = "C:/Users/ab546861/Desktop/MBB/fullGame_Blackburn.RData")
+```
+
+``` {r save game file ConcordiaWisconsin}
+fullGame_ConcordiaWisconsin <- save(fullGame_ConcordiaWsisconsin, file = "C:/Users/ab546861/Desktop/MBB/fullGame_ConcordiaWisconsin.RData")
+
+load(file = "C:/Users/ab546861/Desktop/MBB/fullGame_ConcordiaWisconsin.RData")
+```
+
+``` {r save game file }
+
+```
+
+``` {r save game file }
+
+```
+
+``` {r save game file }
+
+```
+
+``` {r save game file }
+
+```
+
+``` {r save game file }
+
+```
+
+``` {r save game file }
+
+```
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
